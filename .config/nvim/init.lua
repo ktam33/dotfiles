@@ -786,24 +786,48 @@ require('lazy').setup({
 
   { -- Highlight, edit, and navigate code
     'nvim-treesitter/nvim-treesitter',
+    branch = 'main', -- rewritten plugin; requires Neovim >= 0.12 and tree-sitter CLI
+    lazy = false, -- the `main` branch does not support lazy-loading
     build = ':TSUpdate',
-    opts = {
-      ensure_installed = { 'bash', 'c', 'html', 'lua', 'markdown', 'vim', 'vimdoc' },
-      -- Autoinstall languages that are not installed
-      auto_install = true,
-      highlight = { enable = true },
-      indent = { enable = true },
-    },
-    config = function(_, opts)
+    config = function()
       -- [[ Configure Treesitter ]] See `:help nvim-treesitter`
+      local ts = require 'nvim-treesitter'
+      ts.setup()
 
-      ---@diagnostic disable-next-line: missing-fields
-      require('nvim-treesitter.configs').setup(opts)
+      -- Parsers to install on startup (no-op if already installed).
+      local ensure_installed =
+        { 'bash', 'c', 'diff', 'html', 'lua', 'luadoc', 'markdown', 'markdown_inline', 'query', 'vim', 'vimdoc' }
+      ts.install(ensure_installed)
 
-      -- There are additional nvim-treesitter modules that you can use to interact
-      -- with nvim-treesitter. You should go explore a few and see what interests you:
-      --
-      --    - Incremental selection: Included, see `:help nvim-treesitter-incremental-selection-mod`
+      -- Enable treesitter highlighting + indentation per buffer. Highlighting and
+      -- folding are provided by Neovim itself; this plugin only ships the queries
+      -- and parser management, so we wire features up via a FileType autocmd.
+      local function enable(buf, lang)
+        pcall(vim.treesitter.start, buf, lang)
+        -- Treesitter-based indentation (experimental, provided by this plugin).
+        vim.bo[buf].indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()"
+      end
+
+      vim.api.nvim_create_autocmd('FileType', {
+        desc = 'Enable treesitter highlighting and indentation',
+        callback = function(args)
+          local buf = args.buf
+          local lang = vim.treesitter.language.get_lang(args.match) or args.match
+
+          if vim.list_contains(ts.get_installed(), lang) then
+            enable(buf, lang)
+          elseif vim.list_contains(ts.get_available(), lang) then
+            -- Auto-install missing parsers in the background, then enable.
+            ts.install(lang):await(vim.schedule_wrap(function(err)
+              if not err and vim.api.nvim_buf_is_valid(buf) then
+                enable(buf, lang)
+              end
+            end))
+          end
+        end,
+      })
+
+      -- There are additional nvim-treesitter features you can explore:
       --    - Show your current context: https://github.com/nvim-treesitter/nvim-treesitter-context
       --    - Treesitter + textobjects: https://github.com/nvim-treesitter/nvim-treesitter-textobjects
     end,
