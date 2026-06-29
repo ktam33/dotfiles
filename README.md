@@ -1,9 +1,9 @@
 ## Prerequsites
-- oh-my-zsh (the .zshrc points to this)
+- starship
 - tmux
 - neovim
 - some Nerd Font
-- Node/npm (pyright installation inside neovim needs this)
+- nvm + Node/npm (pyright installation inside neovim needs this)
 - stow
 
 
